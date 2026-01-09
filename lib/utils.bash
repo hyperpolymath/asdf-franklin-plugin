@@ -5,33 +5,31 @@ set -euo pipefail
 TOOL_NAME="franklin"
 BINARY_NAME="franklin"
 
-fail() {
-  echo -e "\e[31mFail:\e[m $*" >&2
-  exit 1
-}
+fail() { echo -e "\e[31mFail:\e[m $*" >&2; exit 1; }
 
 list_all_versions() {
-  echo '1.0.0'
+  local curl_opts=(-sL)
+  [[ -n "${GITHUB_TOKEN:-}" ]] && curl_opts+=(-H "Authorization: token $GITHUB_TOKEN")
+  curl "${curl_opts[@]}" "https://api.github.com/repos/tlienart/Franklin.jl/releases" 2>/dev/null | \
+    grep -o '"tag_name": "[^"]*"' | sed 's/"tag_name": "v\?//' | sed 's/"$//' | sort -V
 }
 
 download_release() {
-  local version="$1"
-  local download_path="$2"
+  local version="$1" download_path="$2"
   mkdir -p "$download_path"
   echo "$version" > "$download_path/VERSION"
-  echo "Source compilation required for $TOOL_NAME $version"
 }
 
 install_version() {
-  local version="$1"
-  local install_path="$2"
-  echo "Source compilation for $TOOL_NAME is not yet implemented"
-  echo "Please install $TOOL_NAME $version manually"
+  local install_type="$1" version="$2" install_path="$3"
+
   mkdir -p "$install_path/bin"
-  cat > "$install_path/bin/$BINARY_NAME" << SCRIPT
+
+  # Create wrapper script
+  cat > "$install_path/bin/franklin" << 'WRAPPER'
 #!/usr/bin/env bash
-echo "$TOOL_NAME $version - source compilation required"
-exit 1
-SCRIPT
-  chmod +x "$install_path/bin/$BINARY_NAME"
+julia -e "using Pkg; Pkg.activate(temp=true); Pkg.add(name="Franklin", version="__VERSION__"); using Franklin; Franklin.serve()"
+WRAPPER
+  sed -i "s/__VERSION__/$version/" "$install_path/bin/franklin"
+  chmod +x "$install_path/bin/franklin"
 }
